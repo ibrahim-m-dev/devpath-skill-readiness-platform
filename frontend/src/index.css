@@ -1,0 +1,25 @@
+:root {
+  font-family: Arial, sans-serif;
+  color: #172033;
+  background: #f3f6fb;
+}
+
+html {
+  background: #f3f6fb;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: #f3f6fb;
+  color: #172033;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+  color: #172033;
+}
