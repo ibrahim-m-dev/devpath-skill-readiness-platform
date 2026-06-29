@@ -1,39 +1,14 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 
-const initialSkills = [
-  { id: 1, name: "Java", category: "Backend", level: 55, required: true },
-  { id: 2, name: "React", category: "Frontend", level: 60, required: true },
-  { id: 3, name: "SQL", category: "Database", level: 35, required: true },
-  { id: 4, name: "Spring Boot", category: "Backend", level: 40, required: true },
-  { id: 5, name: "Git & GitHub", category: "Tools", level: 70, required: true },
-  { id: 6, name: "Docker", category: "DevOps", level: 15, required: false }
-];
-
-const initialProjects = [
-  {
-    id: 1,
-    title: "CareerTrack",
-    type: "Full-Stack",
-    status: "Completed",
-    technologies: "React, Java Spring Boot, H2, GitHub Actions"
-  }
-];
-
-const requiredRoleSkills = [
-  "Java",
-  "React",
-  "SQL",
-  "Spring Boot",
-  "Git & GitHub",
-  "REST APIs",
-  "Problem Solving"
-];
+const API_URL = "http://localhost:8080/api";
 
 function App() {
   const [targetRole, setTargetRole] = useState("Software Engineering Intern");
-  const [skills, setSkills] = useState(initialSkills);
-  const [projects, setProjects] = useState(initialProjects);
+  const [skills, setSkills] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [readiness, setReadiness] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   const [skillForm, setSkillForm] = useState({
     name: "",
@@ -49,22 +24,48 @@ function App() {
     technologies: ""
   });
 
-  const readinessScore = useMemo(() => {
-    const requiredSkills = skills.filter((skill) => skill.required);
-    if (requiredSkills.length === 0) return 0;
+  useEffect(() => {
+    loadDashboard();
+  }, []);
 
-    const total = requiredSkills.reduce((sum, skill) => sum + Number(skill.level), 0);
-    return Math.round(total / requiredSkills.length);
-  }, [skills]);
+  async function loadDashboard() {
+    try {
+      const [skillsResponse, projectsResponse, readinessResponse] =
+        await Promise.all([
+          fetch(`${API_URL}/skills`),
+          fetch(`${API_URL}/projects`),
+          fetch(`${API_URL}/readiness`)
+        ]);
 
-  const missingSkills = requiredRoleSkills.filter(
-    (requiredSkill) =>
-      !skills.some(
-        (skill) => skill.name.toLowerCase() === requiredSkill.toLowerCase()
-      )
-  );
+      const skillsData = await skillsResponse.json();
+      const projectsData = await projectsResponse.json();
+      const readinessData = await readinessResponse.json();
 
-  const weakSkills = skills.filter((skill) => skill.required && skill.level < 50);
+      setSkills(skillsData);
+      setProjects(projectsData);
+      setReadiness(readinessData);
+      setTargetRole(readinessData.targetRole || "Software Engineering Intern");
+    } catch (error) {
+      console.error("Failed to load dashboard:", error);
+      alert("Backend connection failed. Make sure Spring Boot is running on port 8080.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const readinessScore = readiness?.readinessScore ?? 0;
+
+  const requiredRoleSkills = useMemo(() => {
+    return readiness?.requiredRoleSkills || [
+      "Java",
+      "React",
+      "SQL",
+      "Spring Boot",
+      "Git & GitHub",
+      "REST APIs",
+      "Problem Solving"
+    ];
+  }, [readiness]);
 
   function handleSkillChange(event) {
     const { name, value, type, checked } = event.target;
@@ -75,7 +76,7 @@ function App() {
     });
   }
 
-  function addSkill(event) {
+  async function addSkill(event) {
     event.preventDefault();
 
     if (!skillForm.name.trim()) {
@@ -84,12 +85,17 @@ function App() {
     }
 
     const newSkill = {
-      id: Date.now(),
       ...skillForm,
       level: Number(skillForm.level)
     };
 
-    setSkills([newSkill, ...skills]);
+    await fetch(`${API_URL}/skills`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(newSkill)
+    });
 
     setSkillForm({
       name: "",
@@ -97,18 +103,33 @@ function App() {
       level: 50,
       required: true
     });
+
+    loadDashboard();
   }
 
-  function deleteSkill(id) {
-    setSkills(skills.filter((skill) => skill.id !== id));
+  async function deleteSkill(id) {
+    await fetch(`${API_URL}/skills/${id}`, {
+      method: "DELETE"
+    });
+
+    loadDashboard();
   }
 
-  function updateSkillLevel(id, newLevel) {
-    setSkills(
-      skills.map((skill) =>
-        skill.id === id ? { ...skill, level: Number(newLevel) } : skill
-      )
-    );
+  async function updateSkillLevel(skill, newLevel) {
+    const updatedSkill = {
+      ...skill,
+      level: Number(newLevel)
+    };
+
+    await fetch(`${API_URL}/skills/${skill.id}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(updatedSkill)
+    });
+
+    loadDashboard();
   }
 
   function handleProjectChange(event) {
@@ -118,7 +139,7 @@ function App() {
     });
   }
 
-  function addProject(event) {
+  async function addProject(event) {
     event.preventDefault();
 
     if (!projectForm.title.trim()) {
@@ -126,12 +147,13 @@ function App() {
       return;
     }
 
-    const newProject = {
-      id: Date.now(),
-      ...projectForm
-    };
-
-    setProjects([newProject, ...projects]);
+    await fetch(`${API_URL}/projects`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(projectForm)
+    });
 
     setProjectForm({
       title: "",
@@ -139,10 +161,28 @@ function App() {
       status: "In Progress",
       technologies: ""
     });
+
+    loadDashboard();
   }
 
-  function deleteProject(id) {
-    setProjects(projects.filter((project) => project.id !== id));
+  async function deleteProject(id) {
+    await fetch(`${API_URL}/projects/${id}`, {
+      method: "DELETE"
+    });
+
+    loadDashboard();
+  }
+
+  if (loading) {
+    return (
+      <main className="app">
+        <section className="hero">
+          <p className="label">DevPath</p>
+          <h1>Loading dashboard...</h1>
+          <p>Connecting to the Spring Boot backend API.</p>
+        </section>
+      </main>
+    );
   }
 
   return (
@@ -196,17 +236,18 @@ function App() {
 
         <div>
           <h2>Improvement Suggestions</h2>
-          {missingSkills.length === 0 && weakSkills.length === 0 ? (
+
+          {readiness?.missingSkills?.length === 0 &&
+          readiness?.weakSkills?.length === 0 ? (
             <p className="positive">Strong match for the selected role.</p>
           ) : (
             <ul>
-              {missingSkills.map((skill) => (
+              {readiness?.missingSkills?.map((skill) => (
                 <li key={skill}>Add or improve: {skill}</li>
               ))}
-              {weakSkills.map((skill) => (
-                <li key={skill.name}>
-                  Improve {skill.name}: current level is {skill.level}%
-                </li>
+
+              {readiness?.weakSkills?.map((skill) => (
+                <li key={skill}>Improve: {skill}</li>
               ))}
             </ul>
           )}
@@ -282,7 +323,7 @@ function App() {
                     max="100"
                     value={skill.level}
                     onChange={(event) =>
-                      updateSkillLevel(skill.id, event.target.value)
+                      updateSkillLevel(skill, event.target.value)
                     }
                   />
                   <strong>{skill.level}%</strong>
